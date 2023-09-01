@@ -1,0 +1,7 @@
+export ORACLE_EXPORT=$ORACLE_BASE/exp
+echo "Export de la base : $ORACLE_SID..."
+
+tm="XX-XX-XX_XX-XX-XX"
+ora_fn="exp_FULL-${ORACLE_SID}-anacron-${tm}"
+ora_save="${ORACLE_EXPORT}/${ora_fn}"
+exp "'system/manager as sysdba'" file=${ora_save}.dmp log=${ora_save}.log FULL=Y COMPRESS=Y STATISTICS=NONE

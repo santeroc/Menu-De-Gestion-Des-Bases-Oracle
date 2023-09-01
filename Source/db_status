@@ -1,0 +1,63 @@
+#!/bin/ksh
+
+#
+# Cette procedure retourne les valeurs suivantes :
+#  * 0 : Si la variable SYSTEM_PWD n'est pas renseignee ou si la base est fermee.
+#  * 1 : Si la base est ouverte en mode normale.
+#  * 2 : Si la base est ouvert et que le mot de passe SYSTEM est incorrect.
+#  * 3 : Si la base est ouverte en mode restreint.
+#
+
+if [ "${SYSTEM_PWD}" = "" ]; then
+{
+ echo "\nVariable SYSTEM_PWD non renseignee."
+ exit 0
+}
+fi
+res=`ps -ef |grep ora_smon_${ORACLE_SID} |grep -v grep |wc -l`
+
+if [ "$res" = 1 ]; then
+{
+ echo "\nProcessus Oracle pour l'instance $ORACLE_SID present."
+ res=`sqlplus system/${SYSTEM_PWD} <<finsql 2>&1 |grep ORA- |wc -l
+finsql`
+
+mdperr=`sqlplus system/${SYSTEM_PWD} <<finsql 2>&1 |grep "invalid username" |wc -l
+finsql`
+ if [ "$mdperr" != 0 ]; then
+ {
+  echo "\nMot de passe SYSTEM incorrect !"
+  exit 2
+ }
+ fi
+
+ if [ "$res" = 0 ]; then
+ {
+  reponse="\nBase ouverte"
+  res=`sqlplus system/${SYSTEM_PWD} @./db_status.sql 2>&1 |grep ALLOWED |wc -l`
+  if [ "$res" = 1 ]; then
+  {
+   reponse="${reponse} et disponible."
+   echo "${reponse}"
+   exit 1
+  }
+  else
+  {
+   reponse="${reponse} mais verouillee en mode restreint."
+   echo "${reponse}"
+   exit 3
+  }
+  fi
+ }
+ else
+ {
+  echo "\nBase fermee."
+ }
+ fi
+}
+else
+{
+ echo "\nProcessus Oracle pour l'instance ${ORACLE_SID} absent."
+}
+fi
+exit 0

@@ -1,0 +1,95 @@
+#!/bin/ksh
+
+if [ "${SYSTEM_PWD}" = "" ]; then
+{
+ echo "\nVariable SYSTEM_PWD non renseignee."
+ echo "\nAucune sauvegarde n'a ete effectue."
+ exit
+}
+fi
+
+if [ "${ORACLE_EXPORT}" = "" ]; then
+{
+ echo "\nVariable ORACLE_EXPORT non renseignee."
+ echo "\nAucune sauvegarde n'a ete effectue."
+ exit
+}
+fi
+
+db_status 1>/dev/null 2>&1
+rep=$?
+if [ "$rep" = 0 ]; then
+{
+ echo "\nSauvegarde impossible lorsque la base de donnees est fermee."
+ exit
+}
+fi
+
+echo "\nEntrez votre nom [QUIT pour sortir] : \c"
+read name
+pr1=`echo "${name}" |grep '[,;:!?./*$^%+~]' |wc -l`
+pr2=`echo "${name}" |grep " " |wc -l`
+((pr1=pr1+pr2))
+while [ "$pr1" != 0 ]; do
+{
+ echo "\nLes caracteres suivants sont interdits \" : ; , ? . / !  \ ^ $ *Â.µ\" "
+ echo "\nEntrez votre nom [QUIT pour sortir] : \c"
+ read name  
+ pr1=`echo "${name}" |grep '[,;:!?./*$^%+~]' |wc -l`
+ pr2=`echo "${name}" |grep " " |wc -l`
+ ((pr1=pr1+pr2))
+}
+done
+
+if [ "${name}" = "quit" -o "${name}" = "QUIT" ]; then
+{
+ echo "\nAucune sauvegarde n'a ete effectue."
+ exit
+}
+fi
+
+tm=`date '+%d-%m-%y_%H-%M-%S'`
+ora_fn="exp_FULL-${ORACLE_SID}-${name}-${tm}"
+ora_save="${ORACLE_EXPORT}/${ora_fn}"
+echo "\nLancement de la sauvegarde de la base de donnees dans le fichier \"${ora_fn}.dmp\"."
+echo "Veuillez patienter...\c"
+exp system/${SYSTEM_PWD} FULL=Y FILE=${ora_save}.dmp LOG=${ora_save}.log COMPRESS=Y STATISTICS=NONE 1>/dev/null 2>&1
+if [ -f ${ora_save}.dmp -a -f ${ora_save}.log ]; then
+{
+ pr1=`cat ${ora_save}.log |tail -1 |grep "Export terminated successfully without warnings" |wc -l`
+ if [ "$pr1" = 1 ]; then
+ {
+  echo "\n\nLa sauvegarde a ete realise avec succes."
+  echo "\nPour acceder a cette sauvegarde depuis un poste windows, cliquer sur Demarrer / Executer puis saisir :"
+  echo "explorer \\\\\\"`hostname`"\\exp"
+ }
+ else
+ {
+  pr1=`cat ${ora_save}.log |tail -1 |grep "Export terminated successfully with warnings" |wc -l`
+  if [ "$pr1" = 1 ]; then
+  {
+   echo "\n\nLa sauvegarde a ete realise avec des avertissements."
+  }
+  else
+  {
+   echo "\n\nLa sauvegarde ne s'est pas deroulee convenablement."
+  }
+  fi
+  echo "\nPour acceder a cette sauvegarde depuis un poste windows, cliquer sur Demarrer / Executer puis saisir :"
+  echo "explorer \\\\\\"`hostname`"\\exp"
+  echo "\n\nVoulez-vous consulter le rapport de sauvegarde [O/N] : \c"
+  read choix
+  if [ "${choix}" = "o" -o "${choix}" = "O" ]; then
+  {
+   clear
+   vi ${ora_save}.log
+  }
+  fi
+ }
+ fi
+}
+else
+{
+ echo "\n\nLa sauvegarde a echoue."
+}
+fi

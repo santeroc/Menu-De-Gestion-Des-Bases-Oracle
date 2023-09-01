@@ -1,0 +1,417 @@
+#!/bin/ksh
+
+if [ "${SYSTEM_PWD}" = "" ]; then
+{
+ echo "\nVariable SYSTEM_PWD non renseignee."
+ exit 0
+}
+fi
+
+if [ "${TMP_PATH}" = "" ]; then
+{
+ echo "\nVariable TMP_PATH non renseignee."
+ exit 0
+}
+fi
+
+if [ "${ORACLE_EXPORT}" = "" ]; then
+{
+ echo "\nVariable ORACLE_EXPORT non renseignee."
+ exit 0
+}
+fi
+
+if [ "${ORACLE_DB_SCRIPT}" = "" ]; then
+{
+ echo "\nVariable ORACLE_DB_SCRIPT non renseignee."
+ exit 0
+}
+fi
+
+function check_imp_log
+{
+ imp_log="$1"
+
+# echo "Verification du log : $imp_log."
+ pr1=`cat ${imp_log} |tail -1 |grep "Import terminated successfully without warnings" |wc -l`
+ if [ "$pr1" = 1 ]; then
+ {
+  echo "\n\nLa restauration a ete realise avec succes."
+ }
+ else
+ {
+  pr1=`cat ${imp_log} |tail -1 |grep "Import terminated successfully with warnings" |wc -l`
+  if [ "$pr1" = 1 ]; then
+  {
+   echo "\n\nLa restauration a ete realise avec des avertissements."
+  }
+  else
+  {
+   echo "\n\nLa restauration ne s'est pas deroulee convenablement."
+  }
+  fi
+  echo "\n\nVoulez-vous consulter le rapport de la restauration [O/N] : \c"
+  read choix
+  if [ "${choix}" = "o" -o "${choix}" = "O" ]; then
+  {
+   clear
+   vi ${imp_log}
+  }
+  fi
+ }
+ fi
+}
+
+function import_user 
+{
+ file_imp="$1"
+ usr_from="$2"
+ usr_to="$3"
+ file_log="$4"
+ destr="$5"
+ r_script="$6"
+
+# echo "file_imp = $file_imp."
+# echo "usr_from = $usr_from."
+# echo "usr_to   = $usr_to."
+# echo "file_log = $file_log."
+# echo "destr    = $destr."
+# echo "r_script = $r_script."
+ 
+ echo "\nLa restauration est prete a demarrer, confirmez-vous l'operation de restauration [O/N] ? \c"
+ read choix
+ if [ "${choix}" = "O" -o "${choix}" = "o" ]; then
+ {
+  echo "\nRestauration en cours, veuillez patienter... \c"
+  if [ "${destr}" = "Y" -o "${destr}" = "y" ]; then
+  {
+    imp system/${SYSTEM_PWD} FILE=${ORACLE_EXPORT}/${file_imp} FROMUSER=${usr_from} TOUSER=${usr_to} LOG=${ORACLE_EXPORT}/${file_log} DESTROY=Y 1>/dev/null 2>&1
+    check_imp_log ${ORACLE_EXPORT}/${file_log}
+  }
+  else
+  {
+   if [ "${r_script}" != "" ]; then
+   {
+    sqlplus system/${SYSTEM_PWD} @${ORACLE_DB_SCRIPT}/${r_script} 1>/dev/null 2>&1
+    imp system/${SYSTEM_PWD} FILE=${ORACLE_EXPORT}/${file_imp} FROMUSER=${usr_from} TOUSER=${usr_to} LOG=${ORACLE_EXPORT}/${file_log} 1>/dev/null 2>&1
+    check_imp_log ${ORACLE_EXPORT}/${file_log}
+   }
+   else
+   {
+    echo "\nErreur dans le script \"restaure_up\" : r_script est vide et destr=N."
+    echo "\nAucune restauration n'a ete effectue."
+    exit
+   }
+   fi
+  }
+  fi
+ }
+ else
+ {
+  echo "\nAucune restauration n'a ete effectue."
+ }
+ fi
+}
+
+clear
+db_status 1>/dev/null 2>&1
+rep=$?
+if [ "$rep" = 0 ]; then
+{
+ echo "\nRestauration impossible lorsque la base de donnees est fermee."
+ exit
+}
+fi
+
+echo "\nVoulez-vous acceder a la sauvegarde automatique la veille [O/N] ? \c"
+read choix
+if [ "${choix}" = "O" -o "${choix}" = "o" ]; then
+{
+ name="anacron"
+}
+else
+{
+ echo "\nEntrez votre nom [QUIT pour sortir] : \c"
+ read name
+}
+fi
+pr1=`echo "${name}" |grep '[,;:!?./*$^%+~]' |wc -l`
+pr2=`echo "${name}" |grep " " |wc -l`
+((pr1=pr1+pr2))
+while [ "$pr1" != 0 -o "${name}" = "" ]; do
+{
+ echo "\nLes caracteres suivants sont interdits \" : ; , ? . / !  \ ^ $ *Ã.Âµ\" "
+ echo "\nEntrez votre nom [QUIT pour sortir] : \c"
+ read name  
+ pr1=`echo "${name}" |grep '[,;:!?./*$^%+~]' |wc -l`
+ pr2=`echo "${name}" |grep " " |wc -l`
+ ((pr1=pr1+pr2))
+}
+done
+
+if [ "${name}" = "quit" -o "${name}" = "QUIT" ]; then
+{
+ echo "\nAucune restauration n'a ete effectue."
+ exit
+}
+fi
+
+#
+# Comptabilisation des fichiers d'export fait par l'utilisateur "name" sur l'instance "ORACLE_SID"...
+#
+rech="exp_????-${ORACLE_SID}-${name}-*.dmp"
+cnt=`find ${ORACLE_EXPORT} -name "${rech}" -print |wc -l`
+if [ "$cnt" = 0 ]; then
+{
+ echo "\nAucun fichier de sauvegarde disponible pour \"${name}\"."
+ exit
+}
+fi
+
+#
+# Listage des sauvegardes faites par l'utilisateur "name" sur l'instance "ORACLE_SID"...
+#
+cheminO=`pwd`
+cd ${ORACLE_EXPORT}
+lstF=`ls ${rech} -lot --time-style=long-iso |grep -v "^d" |grep ".dmp"`
+cd ${cheminO}
+cx=`echo "${lstF}" |awk -F " " '
+{
+ if (NR==1)
+ {
+  printf("\tSELECTIONNER UNE SAUVEGARDE A RESTAURER :\n\n")
+  printf("NUMERO | DATE       | FICHIER\n")
+  printf("-------+------------+----------------------------------------------\n")
+ }
+  printf("%6d | %s | %s\n",NR,$5,$7)
+}
+'` 
+sortie=0
+while [ $sortie = 0 ]; 
+do
+{
+ clear
+ echo "$cx" |more
+ echo "\nEntrez votre choix [QUIT pour quitter] : \c"
+ read choix
+ fic=`echo "$lstF" |awk -F " " '
+                    {
+                     if (NR==kchoix)
+                     {
+                      printf("%s",$7)
+                     }
+                    }
+                    ' kchoix=${choix}`
+ if [ "${choix}" = "quit" -o "${choix}" = "QUIT" ]; then
+ {
+  echo "\nAucune restauration n'a ete effectue."
+  exit
+ }
+ else
+ {
+  if [ "$fic" != "" ]; then
+  {
+   sortie=1
+  }
+  fi
+ }
+ fi
+}
+done
+#echo "Ouvrir le fichier : $fic."
+#
+# Affichage des utilisateurs actuellement connectes sur l'instance...
+#
+rep=`sqlplus system/${SYSTEM_PWD} @./list_session.sql`
+pdeb=`echo "${rep}" |grep -n "UTILISATEURS" |cut -d":" -f1`
+pfin=`echo "${rep}" |grep -n "%$%$%" |cut -d":" -f1`
+aff=`echo "${rep}" |awk '{
+                        if (NR>deb && NR<fin)
+                        {
+                         printf("%s\n",$0)
+                        }
+                       }' deb=${pdeb} fin=${pfin}`
+echo "\n\tLISTE DES UTILISATEURS CONNECTES SUR \"${ORACLE_SID}\" :"
+echo "${aff}" |more
+echo "\nVoulez vous deconnecter tous les utilisateurs oracle de la base [O/N] : \c"
+read rep
+if [ "$rep" = "o" -o "$rep" = "O" ]; then
+{
+# echo "\nActivation de la base en mode restreint..."
+# sqlplus system/${SYSTEM_PWD} <<phrase2sql 1>/dev/null 2>&1
+#alter system enable restricted session;
+#phrase2sql
+ tm=`date '+%d-%m-%y_%H-%M-%S'`
+ tm="${TMP_PATH}/kill_session-${tm}.sql" 
+ echo "\nCreation et execution du script killsession : \"${tm}\"."
+ sqlplus system/${SYSTEM_PWD} @./kills.sql ${tm} 1>/dev/null 2>&1
+
+# rep=`sqlplus system/${SYSTEM_PWD} @./list_session.sql`
+# pdeb=`echo "${rep}" |grep -n "UTILISATEURS" |cut -d":" -f1`
+# pfin=`echo "${rep}" |grep -n "%$%$%" |cut -d":" -f1`
+# aff=`echo "${rep}" |awk '{
+#                         if (NR>deb && NR<fin)
+#                         {
+#                          printf("%s\n",$0)
+#                         }
+#                        }' deb=${pdeb} fin=${pfin}`
+# echo "\n\tLISTE DES UTILISATEURS CONNECTES SUR \"${ORACLE_SID}\" APRES KILLSESSION :"
+# echo "${aff}" |more
+ 
+ #
+ # Determination de la methode de restauration FULL / USER...
+ # On recupere la premiere colone dans le nom de fichier (dont les separateur sont "-") et on doit trouver
+ # exp_FULL ou exp_USER.
+ #
+ cnt=`echo "${fic}" |cut -d"-" -f1`
+ if [ "$cnt" = "exp_FULL" ]; then
+ {
+  #
+  # Import FULL...
+  #
+  echo "\nDoit-on restaurer TOUTE LA BASE [O/N] ? \c"
+  read choix
+  if [ "${choix}" = "O" -o "${choix}" = "o" ]; then
+  {
+   echo "\nRestauration COMPLETE de la base a partir de la sauvegarde \"${fic}\"..."
+   echo "\nLa restauration est prete a demarrer, confirmez-vous l'operation de restauration [O/N] ? \c"
+   read choix
+   if [ "${choix}" = "O" -o "${choix}" = "o" ]; then
+   {
+    echo "\nRestauration en cours, veuillez patienter... \c"
+    dt=`date '+%d-%m-%y_%H-%M-%S'`
+    ficlog="imp_FULL-${ORACLE_SID}-${name}-${dt}.log"
+    imp system/${SYSTEM_PWD} FULL=Y FILE=${ORACLE_EXPORT}/${fic} LOG=${ORACLE_EXPORT}/${ficlog} 1>/dev/null 2>&1
+    check_imp_log ${ORACLE_EXPORT}/${ficlog}
+   }
+   else
+   {
+    echo "Aucune restauration n'a ete effectuee."
+    exit
+   }
+   fi
+  }
+  elif [ "${choix}" = "N" -o "${choix}" = "n" ]; then
+  {
+   #
+   # On passe en mode FROMUSER TOUSER sur un fichier export FULL...
+   #
+   echo "\nEntrez le nom d'utilisateur Oracle a restaurer [QUIT pour sortir] : \c"
+   read user
+   pr1=`echo "${user}" |grep '[,;:!?./*$^%+~]' |wc -l`
+   pr2=`echo "${user}" |grep " " |wc -l`
+   ((pr1=pr1+pr2))
+   while [ "$pr1" != 0 ]; do
+   {
+    echo "\nLes caracteres suivants sont interdits \" : ; , ? . / !  \ ^ $ *Â.µ\" "
+    echo "\nEntrez le nom de l'utilisateur Oracle [QUIT pour sortir] : \c"
+    read user  
+    pr1=`echo "${user}" |grep '[,;:!?./*$^%+~]' |wc -l`
+    pr2=`echo "${user}" |grep " " |wc -l`
+    ((pr1=pr1+pr2))
+   }
+   done
+   if [ "${user}" = "quit" -o "${user}" = "QUIT" ]; then
+   {
+    echo "\nAucune restauration n'a ete effectue."
+    exit
+   }
+   fi
+   echo "\nRestauration de l'utilisateur Oracle \"${user}\" a partir de la sauvegarde \"${fic}\"..."
+   #
+   # recherche d'un script d'initialisation de l'utilisateur Oracle concerne...
+   #
+   script_init="create_user_${user}.sql"
+   destr="N"
+   if [ -f ${ORACLE_DB_SCRIPT}/${script_init} ]; then
+   {
+    #
+    # Fichier d'init trouve, on le traite puis on importe selon le chemin conventionnel...
+    #
+    echo "\nScript d'initialisation \"${script_init}\" trouve, execution de la restauration selon le chemin conventionnel..."
+   }
+   else
+   {
+    #
+    # Pas de script d'init, on demande un destroy ?
+    #
+    echo "\nAucun script d'initialisation \"${script_init}\" n'a ete trouve."
+    echo "Doit-on ecraser l'utilisateur avec une option DESTROY=YES [O/N] ? \c" 
+    read choix
+    if [ "$choix" = "O" -o "$choix" = "o" ]; then
+    {
+     script_init=""
+     destr="Y"
+    }
+    else
+    {
+     echo "\nImpossible de restaurer l'utilisateur Oracle concerne sans script d'init ni option \"DESTROY=YES\"."
+     echo "\nAucune restauration n'a ete effectue."
+     exit
+    }
+    fi
+   }
+   fi
+   dt=`date '+%d-%m-%y_%H-%M-%S'`
+   ficlog="imp_FUSR-${ORACLE_SID}-${name}-${user}-${dt}.log"
+   import_user ${fic} ${user} ${user} ${ficlog} ${destr} ${script_init}
+  }
+  else
+  {
+   echo "\nErreur de saisie - Aucune restauration n'a ete effectuee."
+   exit
+  }
+  fi
+ }
+ else
+ {
+  #
+  # Import USER...
+  #
+  usr=`echo "${fic}" |cut -d"-" -f4`
+  echo "\nRestauration de l'utilisateur Oracle \"${usr}\" a partir de la sauvegarde \"${fic}\"..."
+  #
+  # recherche d'un script d'initialisation de l'utilisateur Oracle concerne...
+  #
+  destr="N"
+  script_init="create_user_${usr}.sql"
+  if [ -f ${ORACLE_DB_SCRIPT}/${script_init} ]; then
+  {
+   #
+   # Fichier d'init trouve, on le traite puis on importe selon le chemin conventionnel...
+   #
+   echo "\nScript d'initialisation \"${script_init}\" trouve, execution de la restauration selon le chemin conventionnel..."
+  }
+  else
+  {
+   #
+   # Pas de script d'init, on demande un destroy ?
+   #
+   echo "\nAucun script d'initialisation \"${script_init}\" n'a ete trouve."
+   echo "Doit-on ecraser l'utilisateur avec une option DESTROY=YES [O/N] ? \c"
+   read choix
+   if [ "$choix" = "O" -o "$choix" = "o" ]; then
+   {
+    script_init=""
+    destr="Y"
+   }
+   else
+   {
+    echo "\nImpossible de restaurer l'utilisateur Oracle concerne sans script d'init ni option \"DESTROY=YES\"."
+    echo "\nAucune restauration n'a ete effectue."
+    exit
+   }
+   fi
+  }
+  fi
+  dt=`date '+%d-%m-%y_%H-%M-%S'`
+  ficlog="imp_USER-${ORACLE_SID}-${name}-${usr}-${dt}.log"
+  import_user ${fic} ${usr} ${usr} ${ficlog} ${destr} $script_init
+ }
+ fi
+}
+else
+{
+ echo "\nAucune restauration n'a ete effectue."
+}
+fi

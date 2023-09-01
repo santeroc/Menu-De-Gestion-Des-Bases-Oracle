@@ -1,0 +1,26 @@
+#!/bin/ksh
+
+         clear
+         pr=`ps -eaf |grep -v grep |grep tnslsnr |wc -l`
+         if [ "$pr" = 0 ];
+         then
+         {
+          echo "\n\nListener deja arrete."
+         }
+         else
+         {
+          echo "\n\nArret du Listener en cours..."
+          lsnrctl stop 1>/dev/null 2>&1
+          pr=`ps -eaf |grep -v grep |grep tnslsnr |wc -l`
+          if [ "$pr" = 0 ];
+          then
+          {
+           echo "\nListener correctement arrete."
+          }
+          else
+          {
+           echo "\nImpossible d'arreter le Listener."
+   	  }
+          fi
+         }
+         fi

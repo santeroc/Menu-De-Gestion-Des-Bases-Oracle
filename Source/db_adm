@@ -1,0 +1,119 @@
+#!/bin/ksh
+#
+#
+
+demarre_base()
+{
+ db_status 1>/dev/null 2>&1
+ ret=$?
+ if [ "$ret" -ne 0 ]; then
+ {
+  echo "\nLa Base de donnees $ORACLE_SID est deja ouverte."
+  if [ "$ret" -eq 2 ]; then
+  {
+   echo "\nLe mot de passe SYSTEM est incorrect !"
+  }
+  fi
+ }
+ else
+ {
+  echo "\nDemarrage de la base de donnee..."
+  #
+  # Avec Oracle v8 on utilise svrmgrl et avec Oracle v9 sqlplus.
+  #
+  if [ -f $ORACLE_HOME/bin/svrmgrl ]; then
+  {
+   # svrmgrl <<phrase2sql 1>/dev/null 2>&1 |grep -v "^$"
+   svrmgrl <<phrase1sql 1>/dev/null 2>&1
+connect internal
+$psql  
+phrase1sql
+  }
+  else
+  {
+   sqlplus '/ as sysdba' 1>/dev/null 2>&1 <<phrase2sql
+$psql  
+phrase2sql
+  }
+  fi
+
+  #
+  # Y a-t-il un gestionnaire OEM (Base Oracle 10g & >... 
+  #
+  if [ -f $ORACLE_HOME/bin/emctl ]; then
+  {
+   echo "\nDemarrage de la console OEM 10g..."
+   emctl start dbconsole 1>/dev/null 2>&1
+  }
+  fi
+  db_status
+ }
+ fi
+}
+
+arrete_base()
+{
+ #
+ # Avec Oracle v8 on utilise svrmgrl et avec Oracle v9 sqlplus.
+ #
+ if [ -f $ORACLE_HOME/bin/svrmgrl ]; then
+ {
+  # svrmgrl <<phrase2sql 1>/dev/null 2>&1 |grep -v "^$"
+  svrmgrl <<phrase3sql 1>/dev/null 2>&1
+connect internal
+$psql
+phrase3sql
+ }
+ else
+ {
+  #
+  # Y a-t-il un gestionnaire OEM (Base Oracle 10g & >...
+  #
+  if [ -f $ORACLE_HOME/bin/emctl ]; then
+  {
+   echo "\nArret de la console OEM 10g..."
+   emctl stop dbconsole 1>/dev/null 2>&1
+  }
+  fi
+
+  sqlplus '/ as sysdba' 1>/dev/null 2>&1 <<phrase4sql
+$psql
+phrase4sql
+ }
+ fi
+ db_status
+}
+
+if [ "$SYSTEM_PWD" = "" ]; then
+{
+ echo "\nVariable SYSTEM_PWD non renseignee."
+ exit
+}
+fi
+
+psql=$*
+case "$psql" in
+ "startup"|"STARTUP")
+ echo "\nDemarrage de la Base de donnee $ORACLE_SID en mode normal..."
+ demarre_base
+ ;;
+ "startup restrict"|"STARTUP RESTRICT")
+ echo "\nDemarrage de la Base de donnee $ORACLE_SID en mode restreint..."
+ demarre_base
+ ;;
+ "shutdown"|"SHUTDOWN")
+ echo "\nArret de la Base de donnee $ORACLE_SID en mode normal..."
+ arrete_base
+ ;;
+ "shutdown immediate"|"SHUTDOWN IMMEDIATE")
+ echo "\nArret de la Base de donnee $ORACLE_SID en mode immediat..."
+ arrete_base
+ ;;
+ "shutdown abort"|"SHUTDWON ABORT")
+ echo "\nArret de la Base de donnee $ORACLE_SID en mode force..."
+ arrete_base
+ ;;
+ *)
+ echo "\nMauvaise valeur d'appel a db_adm."
+ ;;
+esac 

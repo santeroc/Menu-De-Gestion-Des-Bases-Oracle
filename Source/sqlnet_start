@@ -1,0 +1,52 @@
+#!/bin/ksh
+
+#
+# pr <- 1 Si le TNSLSNR est charge.
+# pr <- 0 Si le TNSLSNR n'est pas charge.
+#
+pr=`ps -eaf |grep -v grep |grep tnslsnr |wc -l`
+if [ "$pr" = 1 ];
+then
+{
+ echo "\n\nListener charge, verification de la prise en charge du service ${ORACLE_SID}"
+ pr=`lsnrctl services |grep Service |grep -w ${ORACLE_SID} |wc -l`
+ if [ "$pr" = 1 ];
+ then
+ {
+  echo "\nService ${ORACLE_SID} charge."
+ }
+ else
+ {
+  echo "\nService ${ORACLE_SID} Hors Service."
+ }
+ fi
+}
+else
+{
+ echo "\nDemarrage du Listener..."
+ lsnrctl start 1>/dev/null 2>&1
+
+ pr=`ps -eaf |grep -v grep |grep tnslsnr |wc -l`
+ if [ "$pr" = 1 ];
+ then
+ {
+  echo "\nListener a bien demarre, verification de la prise en charge du service ${ORACLE_SID}"
+  pr=`lsnrctl services |grep Service |grep -w $ORACLE_SID |wc -l`
+  if [ "$pr" = 1 ];
+  then
+  {
+   echo "\nService ${ORACLE_SID} charge."
+  }
+  else
+  {
+   echo "\nService ${ORACLE_SID} Hors Service."
+  }
+  fi
+ }
+ else
+ {
+  echo "\nImpossible de demarrer le Listener."
+ }
+ fi
+}
+fi

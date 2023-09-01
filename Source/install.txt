@@ -1,0 +1,43 @@
+Installation du Script de Gestion :
+
+1) Creer un dossier Scripts sous orcle...
+   mkdir /oracle/Scripts
+
+2) detare le fichier par une commande tar...
+   tar -xzvf ./Menu_Oracle.tar.gz
+
+3) Creer un dossier pour les scripts d'initialisation des users Oracle...
+   mkdir /oracle/Scripts/init
+
+4) Copier les fichiers de scripts dans /oracle/Scripts.
+
+5) changer les droits et les acces du dossier /oracle/Scripts...
+   chown -R oracle:dba /oracle/Scripts
+   chmod -R 775 /oracle/Scripts
+
+6) Adapter les variables d'environnement contenu dans le .bashrc de l'
+   utilisateur qui doit recevoir le menu avec le .bashrc de l'utilisateur
+   oracle sous linux et penser a changer le ORACLE_SID.
+   (!) Editer egalement le fichier "menu" qui contient des variables globales
+   indispensable au bon fonctionnement des scripts.
+
+7) Editer le fichier exp_db et adapter la variable d'environnement
+ORACLE_EXPORT si necessaire.
+
+8) Editer le .bashrc dans /home/utilisateur de l'utilisateur qui doit recevoir 
+   le menu de gestion et ajouter a la fin :
+
+#
+# Mise en Service du menu de gestion...
+# Changer "-bash" par "-ksh" ou "-csh" ou autre si necessaire en fonction
+# de l'interpreteur choisi...
+#
+export PROC_SH=$$
+if [ "$0" = "-bash" ]; then
+{
+ cd /oracle/Scripts
+ exec menu
+}
+fi
+
+9) Quiter Verifier c'est fini.

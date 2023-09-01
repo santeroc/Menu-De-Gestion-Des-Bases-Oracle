@@ -1,0 +1,182 @@
+#!/bin/ksh
+
+if [ "${SYSTEM_PWD}" = "" ]; then
+{
+ echo "\nVariable SYSTEM_PWD non renseignee."
+ echo "\nAucune sauvegarde n'a ete effectue."
+ exit
+}
+fi
+
+if [ "${ORACLE_EXPORT}" = "" ]; then
+{
+ echo "\nVariable ORACLE_EXPORT non renseignee."
+ echo "\nAucune sauvegarde n'a ete effectue."
+ exit
+}
+fi
+
+db_status 1>/dev/null 2>&1
+rep=$?
+if [ "$rep" = 0 ]; then
+{
+ echo "\nSauvegarde impossible lorsque la base de donnees est fermee."
+ exit
+}
+fi
+
+if [ "$rep" = 3 ]; then
+{
+ echo "\nSauvegarde d'un utilisateur Oracle impossible lorsque la base est ouverte en mode restreint."
+ exit
+}
+fi
+
+echo "\nEntrez votre nom [QUIT pour sortir] : \c"
+read name
+pr1=`echo "${name}" |grep '[,;:!?./*$^%+~]' |wc -l`
+pr2=`echo "${name}" |grep " " |wc -l`
+((pr1=pr1+pr2))
+while [ "$pr1" != 0 ]; do
+{
+ echo "\nLes caracteres suivants sont interdits \" : ; , ? . / !  \ ^ $ *Â.µ\" "
+ echo "\nEntrez votre nom [QUIT pour sortir] : \c"
+ read name  
+ pr1=`echo "${name}" |grep '[,;:!?./*$^%+~]' |wc -l`
+ pr2=`echo "${name}" |grep " " |wc -l`
+ ((pr1=pr1+pr2))
+}
+done
+if [ "${name}" = "quit" -o "${name}" = "QUIT" ]; then
+{
+ echo "\nAucune sauvegarde n'a ete effectue."
+ exit
+}
+fi
+
+echo "\nEntrez le nom d'utilisateur Oracle [QUIT pour sortir] : \c"
+read user
+pr1=`echo "${user}" |grep '[,;:!?./*$^%+~]' |wc -l`
+pr2=`echo "${user}" |grep " " |wc -l`
+((pr1=pr1+pr2))
+while [ "$pr1" != 0 ]; do
+{
+ echo "\nLes caracteres suivants sont interdits \" : ; , ? . / !  \ ^ $ *Â.µ\" "
+ echo "\nEntrez le nom de l'utilisateur Oracle [QUIT pour sortir] : \c"
+ read user  
+ pr1=`echo "${user}" |grep '[,;:!?./*$^%+~]' |wc -l`
+ pr2=`echo "${user}" |grep " " |wc -l`
+ ((pr1=pr1+pr2))
+}
+done
+if [ "${user}" = "quit" -o "${user}" = "QUIT" ]; then
+{
+ echo "\nAucune sauvegarde n'a ete effectue."
+ exit
+}
+fi
+
+echo "\nEntrez le mot de passe de l'utilisateur \"${user}\" : \c"
+stty -echo
+read pawd
+pawd=`echo "$pawd"|sed -e "s/ //g"`
+stty echo
+#
+# Mot de passe vide interdit !
+#
+if [ "$pawd" != "" ]; then
+{
+ mdpverif=`sqlplus ${user}/${pawd} <<finsql 2>&1 |grep "invalid username" |wc -l
+finsql`
+}
+else
+{
+ mdpverif=1
+}
+fi
+while [ "$mdpverif" = 1 ]; do
+{
+ echo "\n\nUtilisateur \"${user}\" inconnu ou mot de passe incorrect."
+ echo "\nEntrez le nom de l'utilisateur Oracle [QUIT pour sortir] : \c"
+ read user
+ pr1=`echo "${user}" |grep '[,;:!?./*$^%+~]' |wc -l`
+ pr2=`echo "${user}" |grep " " |wc -l`
+ ((pr1=pr1+pr2))
+ while [ "$pr1" != 0 ]; do
+ {
+  echo "\nLes caracteres suivants sont interdits \" : ; , ? . / !  \ ^ $ *Â.µ\" "
+  echo "\nEntrez le nom d'utilisateur Oracle [QUIT pour sortir] : \c"
+  read user  
+  pr1=`echo "${user}" |grep '[,;:!?./*$^%+~]' |wc -l`
+  pr2=`echo "${user}" |grep " " |wc -l`
+  ((pr1=pr1+pr2))
+ }
+ done
+ if [ "${user}" = "quit" -o "${user}" = "QUIT" ]; then
+ {
+  echo "\nAucune sauvegarde n'a ete effectue."
+  exit
+ }
+ fi
+ echo "\nEntrez le mot de passe de l'utilisateur \"${user}\" : \c"
+ stty -echo
+ read pawd
+ pawd=`echo "$pawd"|sed -e "s/ //g"`
+ stty echo
+ #
+ # Mot de passe vide interdit !
+ #
+ if [ "$pawd" != "" ]; then
+ {
+  mdpverif=`sqlplus ${user}/${pawd} <<finsql 2>&1 |grep "invalid username" |wc -l
+finsql`
+ }
+ fi
+}
+done
+
+tm=`date '+%d-%m-%y_%H-%M-%S'`
+ora_fn="exp_USER-${ORACLE_SID}-${name}-${user}-${tm}"
+ora_save="${ORACLE_EXPORT}/${ora_fn}"
+echo "\n\nLancement de la sauvegarde de la base de donnees dans le fichier \"${ora_fn}.dmp\"."
+echo "Veuillez patienter...\c"
+exp USERID=${user}/${pawd} FILE=${ora_save}.dmp LOG=${ora_save}.log COMPRESS=Y STATISTICS=NONE 1>/dev/null 2>&1
+if [ -f ${ora_save}.dmp -a -f ${ora_save}.log ]; then
+{
+ pr1=`cat ${ora_save}.log |tail -1 |grep "Export terminated successfully without warnings" |wc -l`
+ if [ "$pr1" = 1 ]; then
+ {
+  echo "\n\nLa sauvegarde a ete realise avec succes."
+  echo "\nPour acceder a cette sauvegarde depuis un poste windows, cliquer sur Demarrer / Executer puis saisir :"
+  echo "explorer \\\\\\"`hostname`"\\exp"
+ }
+ else
+ {
+  pr1=`cat ${ora_save}.log |tail -1 |grep "Export terminated successfully with warnings" |wc -l`
+  if [ "$pr1" = 1 ]; then
+  {
+   echo "\n\nLa sauvegarde a ete realise avec des avertissements."
+  }
+  else
+  {
+   echo "\n\nLa sauvegarde ne s'est pas deroulee convenablement."
+  }
+  fi
+  echo "\nPour acceder a cette sauvegarde depuis un poste windows, cliquer sur Demarrer / Executer puis saisir :"
+  echo "explorer \\\\\\"`hostname`"\\exp"
+  echo "\n\nVoulez-vous consulter le rapport de sauvegarde [O/N] : \c"
+  read choix
+  if [ "${choix}" = "o" -o "${choix}" = "O" ]; then
+  {
+   clear
+   vi ${ora_save}.log
+  }
+  fi
+ }
+ fi
+}
+else
+{
+ echo "\n\nLa sauvegarde a echoue."
+}
+fi

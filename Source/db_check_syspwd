@@ -1,0 +1,27 @@
+#!/bin/ksh
+#
+# Retourne 1 si le mot de passe SYSTEM est correct sinon 0.
+#
+
+if [ "${SYSTEM_PWD}" = "" ]; then
+{
+ #echo "Variable non initialise."
+ exit 0
+}
+fi
+res=`ps -ef |grep ora_smon_$ORACLE_SID |grep -v grep |wc -l`
+if [ "${res}" -eq 1 ]; then
+{
+ sqlplus system/${SYSTEM_PWD} <<finsql |grep "ERR[EO].*R *:" >/dev/null
+exit
+finsql
+ if [ "$?" -eq 1 ]; then
+ {
+  #echo "Mot de passe SYSTEM correct."
+  exit 1
+ }
+ fi
+}
+fi
+#echo "Mot de passe SYSTEM incorrect."
+exit 0

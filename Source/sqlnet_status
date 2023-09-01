@@ -1,0 +1,35 @@
+#!/bin/ksh
+#
+# Cette procedure retourne 0 si le Listener est absent et 1 si le listener
+# fonctionne correctement.
+#
+
+#
+# pr <- 1 Si le TNSLSNR est charge.
+# pr <- 0 Si le TNSLSNR n'est pas charge.
+#
+pr=`ps -eaf |grep -v grep |grep tnslsnr |wc -l`
+if [ "$pr" -eq 1 -o "$pr" -gt 1 ];
+then
+{
+ echo "\n\nListener charge, verification de la prise en charge du service ${ORACLE_SID}"
+ pr=`lsnrctl services |grep Service |grep -w ${ORACLE_SID} |wc -l`
+ if [ "$pr" = 1 ];
+ then
+ {
+  echo "\nService ${ORACLE_SID} charge."
+  exit 1
+ }
+ else
+ {
+  echo "\nService ${ORACLE_SID} Hors Service."
+ }
+ fi
+}
+else
+{
+ echo "\n\nListener arrete."
+ echo "\nService ${ORACLE_SID} Hors Service."
+}
+fi
+exit 0

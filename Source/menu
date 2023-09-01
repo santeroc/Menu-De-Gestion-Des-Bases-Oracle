@@ -1,0 +1,226 @@
+#!/bin/ksh
+
+trap '' 2                     # Break off
+USER_SHELL="/bin/bash"
+
+#
+# Emplacement des fichiers d'export realiser par le menu de gestio...
+#
+export ORACLE_EXPORT="${ORACLE_BASE}/exp"
+#
+# Emplacement dans lequel les scripts peuvent creer des fichiers
+# temporaire.
+#
+export TMP_PATH="/tmp"
+
+#
+# Sous dossier ./init/ dans lequelle il faut placer les scripts Oracle SQL
+# create_user_XXX.sql.
+#
+ORACLE_DB_SCRIPT=`pwd`
+ORACLE_DB_SCRIPT="${ORACLE_DB_SCRIPT}/init"
+export ORACLE_DB_SCRIPT
+
+verifie_MDP()
+{
+ mdp=0
+ cnt=3
+ clear
+ while [ "$mdp" -eq 0 -a "$cnt" -gt 0 ];
+ do
+  echo "\n\n\nVeuillez saisir le mot de passe de l'utilisateur Oracle \"SYSTEM\" (${cnt}) : \c"
+  stty -echo
+  read rep
+  rep=`echo "$rep"|sed -e "s/ //g"`
+  stty echo
+ 
+  res=`ps -ef |grep ora_smon_${ORACLE_SID} |grep -v grep |wc -l`
+  if [ "$res" = 1 ]; then
+  {
+   sqlplus system/${rep} <<finsql |grep "ERR[EO].*R *:" >/dev/null
+exit
+finsql
+   if [ "$?" = 0 ]; then
+   {
+    echo "\n\nLe mot de passe SYSTEM saisie est incorrect !"
+    echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+    read entre
+    ((cnt=cnt-1))
+   }
+   else
+   {
+    mdp=1
+   }
+   fi
+  }
+  else
+  {
+   echo "\n\nBase Oracle indisponible verification du mot de passe SYSTEM impossible."
+   echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+   read entre
+   mdp=1
+  }
+  fi
+ done
+ if [ "$mdp" = 1 ]; then
+ {
+  export SYSTEM_PWD=${rep}
+ }
+ else
+ {
+  echo "\nSans mot de passe SYSTEM valide l'acces au menu de gestion est interdite."
+  echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+  read entre
+  exit
+ }
+ fi
+}
+
+if [ "${ORACLE_SID}" = "" ]; then
+{
+ echo "\nImpossible de connaitre la base de donnees a gerer (variable ORACLE_SID non renseignee)."
+ echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+ read entre
+ exit 0
+}
+fi
+
+verifie_MDP
+while true
+do
+clear
+echo "\t\t\tMENU DE MAINTENANCE BASE : ${ORACLE_SID}
+________________________________________________________________________________
+
+       Demarrer la Base de Donnees en mode normal.................... : D
+       Demarrer la Base de Donnees en mode restreint................. : X
+       Arreter  la Base de Donnees en mode normal.................... : Z
+       Arreter  la Base de Donnees en mode immediat.................. : I
+       Arreter  la Base de Donnees en mode force..................... : F
+       Etat de  la Base de Donnees................................... : E\n
+       Demarrer le Listener.......................................... : K
+       Arreter  le Listener.......................................... : L
+       Etat du  Listener............................................. : M\n
+       Lancer une Sauvegarde de la Base de Donnees Immediate......... : S
+       Lancer une Sauvegarde de la Base de Donnees Personnalisee..... : P\n
+       Restaurer une Base de Donnees................................. : R\n
+       Acceder au BASH............................................... : B\n
+       Quitter ...................................................... : Q
+________________________________________________________________________________
+                                             votre choix ............ : \c"
+  
+  read CHOIX
+  case "$CHOIX" in
+        d|D)
+        clear
+        db_adm startup
+        rep=$?
+        #echo "\nrep = $rep."
+        echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+        read entre
+        if [ "$rep" = 2 ]; then
+        {
+         verifie_MDP
+        }
+        fi
+        ;;
+        x|X)
+        clear
+        db_adm startup restrict
+        rep=$?
+        #echo "\nrep = $rep."
+        echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+        read entre
+        if [ "$rep" = 2 ]; then
+        {
+         verifie_MDP
+        }
+        fi
+        ;;        
+        z|Z)
+        clear
+        db_adm shutdown
+        echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+        read entre
+        ;;
+        i|I)
+        clear
+        db_adm shutdown immediate
+        echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+        read entre
+        ;;
+        f|F)
+        clear
+        db_adm shutdown abort
+        echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+        read entre
+        ;;
+        e|E)
+	 clear
+	 db_status
+         echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+         read entre
+        ;;
+        k|K)
+         clear
+         sqlnet_start
+         echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+         read entre
+         ;;        
+        l|L)
+	 clear
+	 sqlnet_stop
+	 echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+         read entre
+         ;;
+        m|M)
+         clear
+         sqlnet_status
+         echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+         read entre
+         ;;
+        s|S)
+         clear
+         db_exp_full
+         echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+         read entre
+         ;;
+        p|P)
+         clear
+         db_exp_user
+         echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+         read entre
+         ;;
+        r|R)
+         clear
+         restaure_up
+         echo "\nAppuyer sur [ENTREE] pour continuer... \c"
+         read entre
+         ;;
+        b|B)
+         clear
+         echo "\nPour sortir du Shell taper <Ctrl d> ou \"exit <ENTREE>\"\n"
+         trap 2   # Break on 
+	 $USER_SHELL	
+         trap '' 2 # Break off
+         continue
+         ;;
+        q|Q)   clear
+               echo "\n\n\n\n\n\n\n\n"
+               echo "
+                         ***********************************
+                         *                                 *
+                         *   FIN DE SESSION EXPLOITATION   *
+                         *                                 *
+                         ***********************************"
+               sleep 2
+               clear
+               kill -9 $$ $PROC_SH 1>/dev/null 2>/dev/null
+               exit 0
+               ;;
+    *)         echo "\007                        >>>   CHOIX INVALIDE   <<<\c"
+               sleep 2
+               continue
+               ;;
+  esac
+done               
